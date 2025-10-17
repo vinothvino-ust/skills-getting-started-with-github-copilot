@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Mergington High — Activities</title>
+  <style>
+    /* Simple, clean styling for activity cards */
+    :root{
+      --bg:#f5f7fb;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --accent:#2563eb;
+      --shadow: 0 6px 18px rgba(16,24,40,0.08);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:#0f172a}
+    .wrap{max-width:1100px;margin:36px auto;padding:0 20px}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+    h1{font-size:20px;margin:0}
+    p.lead{color:var(--muted);margin:6px 0 0;font-size:14px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+    .card{
+      background:var(--card);
+      border-radius:12px;
+      padding:16px;
+      box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:12px;
+      transition:transform .12s ease, box-shadow .12s ease;
+    }
+    .card:hover{transform:translateY(-6px);box-shadow:0 12px 30px rgba(16,24,40,0.12)}
+    .meta{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted)}
+    .title{font-weight:600;font-size:16px}
+    .desc{color:#111827;font-size:14px;margin:0}
+    .participants{background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #e6eef9}
+    .participants h4{margin:0 0 8px 0;font-size:13px;color:var(--muted)}
+    .participants ul{margin:0;padding-left:18px;font-size:14px;color:#0b1220}
+    .participants li{margin:6px 0;word-break:break-all}
+    .no-participants{color:var(--muted);font-size:14px}
+    .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    input[type="email"]{padding:8px 10px;border:1px solid #e6eef9;border-radius:8px;font-size:14px;min-width:180px}
+    button{background:var(--accent);color:white;border:none;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
+    button.secondary{background:#e6eef9;color:var(--accent);font-weight:600}
+    .msg{font-size:13px;color:var(--muted)}
+    footer{margin-top:26px;text-align:center;color:var(--muted);font-size:13px}
+    @media (max-width:420px){input[type="email"]{min-width:120px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Mergington High — Activities</h1>
+        <p class="lead">Browse extracurricular activities and view participants. Sign up by entering your school email.</p>
+      </div>
+      <div class="msg" id="status">Loading…</div>
+    </header>
+
+    <main>
+      <div class="grid" id="activitiesGrid">
+        <!-- activity cards will be injected here -->
+      </div>
+    </main>
+
+    <footer>
+      Built for demo — activities and participants are stored in-memory on the server.
+    </footer>
+  </div>
+
+  <script>
+    const grid = document.getElementById('activitiesGrid');
+    const status = document.getElementById('status');
+
+    async function fetchActivities(){
+      try{
+        status.textContent = 'Loading activities…';
+        const res = await fetch('/activities');
+        if(!res.ok) throw new Error('Failed to load activities');
+        const data = await res.json();
+        renderActivities(data);
+        status.textContent = '';
+      }catch(err){
+        console.error(err);
+        status.textContent = 'Could not load activities';
+      }
+    }
+
+    function escapeHtml(s){
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function renderParticipants(participants){
+      if(!participants || participants.length === 0){
+        return '<div class="no-participants">No participants yet</div>';
+      }
+      const items = participants.map(p => `<li>${escapeHtml(p)}</li>`).join('');
+      return `<div class="participants"><h4>Participants</h4><ul>${items}</ul></div>`;
+    }
+
+    function buildCard(name, info){
+      const participantsHtml = renderParticipants(info.participants);
+      const encodedName = encodeURIComponent(name);
+      return `
+        <article class="card" data-name="${escapeHtml(name)}">
+          <div class="meta">
+            <div class="title">${escapeHtml(name)}</div>
+            <div class="meta-right">${escapeHtml(info.schedule)}</div>
+          </div>
+
+          <p class="desc">${escapeHtml(info.description)}</p>
+          ${participantsHtml}
+
+          <div class="actions">
+            <input type="email" placeholder="you@mergington.edu" aria-label="email" class="email-input">
+            <button data-activity="${encodedName}" class="signup-btn">Sign up</button>
+            <button class="secondary refresh-btn">Refresh</button>
+            <div class="msg small-msg" style="margin-left:auto;color:var(--muted);font-size:13px"></div>
+          </div>
+        </article>
+      `;
+    }
+
+    function renderActivities(data){
+      grid.innerHTML = '';
+      const entries = Object.entries(data);
+      if(entries.length === 0){
+        grid.innerHTML = '<p>No activities available</p>';
+        return;
+      }
+      grid.innerHTML = entries.map(([name, info]) => buildCard(name, info)).join('');
+      attachHandlers();
+    }
+
+    function attachHandlers(){
+      document.querySelectorAll('.signup-btn').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const activity = decodeURIComponent(btn.getAttribute('data-activity'));
+          const card = btn.closest('.card');
+          const input = card.querySelector('.email-input');
+          const msgEl = card.querySelector('.small-msg');
+          const email = input.value.trim();
+          msgEl.textContent = '';
+          if(!email){
+            msgEl.textContent = 'Enter an email to sign up';
+            return;
+          }
+          try{
+            btn.disabled = true;
+            btn.textContent = 'Signing up…';
+            const url = `/activities/${encodeURIComponent(activity)}/signup?email=${encodeURIComponent(email)}`;
+            const res = await fetch(url, { method: 'POST' });
+            const json = await res.json().catch(()=>({}));
+            if(!res.ok){
+              msgEl.textContent = json.detail || 'Signup failed';
+              return;
+            }
+            msgEl.textContent = json.message || 'Signed up';
+            input.value = '';
+            // refresh all activities to show updated participants
+            await fetchActivities();
+          }catch(err){
+            console.error(err);
+            msgEl.textContent = 'Network error';
+          }finally{
+            btn.disabled = false;
+            btn.textContent = 'Sign up';
+          }
+        });
+      });
+
+      document.querySelectorAll('.refresh-btn').forEach(b=>{
+        b.addEventListener('click', fetchActivities);
+      });
+    }
+
+    // Initial load
+    fetchActivities();
+  </script>
+</body>
+</html>
